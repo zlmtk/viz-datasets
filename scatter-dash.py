@@ -10,7 +10,11 @@ from io import BytesIO
 import pandas as pd 
 import plotly.graph_objects as go
 import base64
-import pprint 
+import pprint
+import argparse
+import glob 
+import os 
+
 pp = pprint.PrettyPrinter(width=41, compact=True)
 
 
@@ -24,80 +28,32 @@ def load_images (path) :
         encoded_image = base64.b64encode(im_data).decode('ascii')
         return encoded_image
 
-def build_data () : 
 
-    #Data management 
-    df=pd.read_table('/data1/datasets/cvlab/fire-smoke/error-analysis/embed_laion-VIT-validset.csv',sep=',')
-    
-    images_path=[]
+def build_data (embedding_file) : 
+
+    print(embedding_file)
+    df_loaded=pd.read_table(embedding_file,sep=",")
+    print(df_loaded.head())
+
     data=[]
-    data.append(go.Scatter(customdata= df['image'],
+    color_tab=['Aqua','Teal','Coral','Fuchsia']
+    print(df_loaded.columns)
+    for datasetname in df_loaded['dataset'].unique() : 
+
+        df=df_loaded[df_loaded['dataset']==datasetname] 
+        sel_color=color_tab.pop()
+        customData=[(i,sel_color) for i in df['image']] 
+        data.append(go.Scatter(customdata=customData,  
                            x=df['x'],
                            y=df['y'],
                            mode='markers',
-                           marker=dict(size=10)))
+                           marker=dict(color=sel_color)))
     return data
 
+def build_scatter_figure_layout(data) : 
 
-##############################################################################
-# MAIN Layout 
-##############################################################################
-
-app=dash.Dash(__name__)
-
-
-#Global layout 
-app.layout = html.Div([
-        dbc.NavbarSimple(
-    children=[
-        dbc.NavItem(dbc.NavLink("Accueil", href="/")),
-        dbc.NavItem(dbc.NavLink("Page 1", href="/page1")),
-        dbc.NavItem(dbc.NavLink("Page 2", href="/page2")),
-        dbc.Button("Reset", color="secondary", className="me-1",id="reset-2"),
-
-    ],
-    brand="Mon Application",
-    brand_href="#",
-    color="dark",
-    dark=True,
-),
-    dcc.Graph(
-        id='scatter-plot',
-        figure={
-                'data': build_data(),
-                'layout': go.Layout(
-                    title='Scatter dataset embedding',
-                    hovermode='closest',
-                    clickmode='event+select',
-                    showlegend=False,
-                    height=600,
-                    plot_bgcolor= '#111111',
-                    paper_bgcolor= '#111111',
-                    font= {'color': '#7FDBFF'}
-              )
-        },
-        style={'width': '100%'}
-    ),
-    html.Br(),
-    html.Div(id='image-output'),
-])
-
-
-
-##############################################################################
-#CALLBACK 
-##############################################################################
-
-
-@app.callback(
-    Output('scatter-plot', 'figure'),
-    [Input('reset-2', 'n_clicks')],
-    [State('scatter-plot', 'selectedData')]
-)
-def reset_selection(selectedData,relayoutData):
-        print("==============reset===================")
-        return {
-                'data': build_data(),
+    figure = {
+                'data': data,
                 'layout': go.Layout(
                     title='Scatter dataset embedding',
                     hovermode='closest',
@@ -109,30 +65,94 @@ def reset_selection(selectedData,relayoutData):
                     font= {'color': '#7FDBFF'}
               )
         }
-
-@app.callback(
-    Output('image-output', 'children'),
-    [Input('scatter-plot', 'selectedData')]
-)
-def display_selected_image(selectedData):
-    print(selectedData)
-    if selectedData:
-        returned_images=[]
-       #pp.pprint(selectedData)
-        for i in selectedData['points'] : 
-      
-          point_index =i['curveNumber']
-          encoded_image=load_images(i['customdata'])
-
-          #display each images
-          im_load=html.Img(src='data:image/png;base64,{}'.format(encoded_image))
-          returned_images.append(im_load)
-          
-          #returned_images.append(html.Img(src='data:image/png;base64,{}'.format(encoded_images[point_index])))
-        return returned_images
-    else:
-        return ''
+    return figure 
 
 
-# Exécution de l'application Dash
-app.run_server(host='0.0.0.0',port='9191')
+
+##################################################################################
+#== MAIN == |
+##################################################################################
+
+if __name__ == "__main__":
+
+    # Create the parser
+    parser = argparse.ArgumentParser(description='dataviz')
+    # Add arguments
+    parser.add_argument('-f',
+                     '--embedding-file', 
+                     type=str, 
+                     help='file path with the embedding in a csv format',
+                     required=True)
+    # Parse the arguments
+    args = parser.parse_args()
+    
+    ##############################################################################
+    # LAYOUT
+    ##############################################################################
+
+    app=dash.Dash(__name__)
+
+    #Global layout 
+    app.layout = html.Div([
+            dbc.NavbarSimple(
+        children=[
+            dbc.Button("Reset", color="secondary", className="me-1",id="reset-2"),
+
+        ],
+        brand="Embedding scatter",
+        brand_href="#",
+        color="dark",
+        dark=True,
+    ),
+        dcc.Graph(
+            id='scatter-plot',
+            figure=build_scatter_figure_layout(build_data(args.embedding_file)),
+            style={'width': '100%'}
+        ),
+        html.Br(),
+        html.Div(id='image-output'),
+    ])
+
+    ##############################################################################
+    #CALLBACK 
+    ##############################################################################
+
+
+    @app.callback(
+        Output('scatter-plot', 'figure'),
+        [Input('reset-2', 'n_clicks')],
+        [State('scatter-plot', 'selectedData')]
+    )
+    def reset_selection(selectedData,relayoutData):
+            
+            print("==============reset===================")
+            return build_scatter_figure_layout(build_data(args.embedding_file))
+
+    @app.callback(
+        Output('image-output', 'children'),
+        [Input('scatter-plot', 'selectedData')], 
+    )
+    def display_selected_image(selectedData ):
+        if selectedData:
+            returned_images=[]
+        #pp.pprint(selectedData)
+            for i in selectedData['points'] : 
+                try : 
+                    print(i)
+                    point_index =i['curveNumber']
+                    cdata=i['customdata']
+                    encoded_image=load_images(cdata[0])
+
+                    #display each images
+                    im_load=html.Img(src="data:image/png;base64,{}".format(encoded_image),
+                                    style={"border": "2px solid "+cdata[1]})
+                    returned_images.append(im_load)
+                except Exception as e : 
+                    print(e)
+                    pass
+            return returned_images
+        else:
+            return ''
+
+    # Exécution de l'application Dash
+    app.run_server(host='0.0.0.0',port='7777')
