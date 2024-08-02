@@ -14,13 +14,13 @@ import pprint
 import argparse
 import glob 
 import os
-import matplotlib.pyplot as plt
-import matplotlib
 import plotly.graph_objects as go
 import json
 
 pp = pprint.PrettyPrinter(width=41, compact=True)
 
+updated_object=None
+colors_used={}
 color_names = [
 
         'red',          # Primary color, very distinct
@@ -52,16 +52,19 @@ def get_color(dataset,
               colors_args):
 
     dataset=str(dataset)
+    if dataset in colors_used.keys() : 
+        return colors_used[dataset]
+
     if dataset in colors_args.keys() : 
         c=colors_args[dataset]
         print ('dataset %s is defined by user for the color %s' % (dataset,c))
-        colors_used.add(c)
+        colors_used[dataset]=c
         return c 
     else : 
         for cn in color_names : 
-            if cn not in colors_used : 
+            if cn not in colors_used.values() : 
                 print ('dataset %s is defined the color %s' % (dataset,cn))
-                colors_used.add(cn)
+                colors_used[dataset]=cn
                 return cn 
     raise Exception ("No colors found")
         
@@ -85,15 +88,15 @@ def build_data (embedding_file,colors) :
 
     data=[]
     print(df_loaded.columns)
-    colors_used = set()
 
-    for i, datasetname in enumerate(df_loaded['dataset'].unique()) : 
-        
+
+    for i, datasetname in enumerate(df_loaded['dataset'].unique()) :
+
         sel_color = get_color(datasetname,
-                             color_names,
-                             colors_used,
-                             colors
-                             )
+                                color_names,
+                                colors_used,
+                                colors
+                                )
 
         df=df_loaded[df_loaded['dataset']==datasetname] 
         customData=[(i,sel_color) for i in df['image']] 
@@ -122,6 +125,27 @@ def build_scatter_figure_layout(data) :
         }
     return figure 
 
+def create_dropdown_menu(items):
+
+    menu_items = [
+        dbc.DropdownMenuItem(
+            [
+                html.Div(style={'background-color': item['color'], 'width': '10px', 'height': '10px', 'display': 'inline-block', 'margin-right': '10px'}),
+                html.Span(item['label'])
+            ],
+            href="#"
+        )
+        for item in items
+    ]
+    return dbc.DropdownMenu(children=menu_items, nav=True, in_navbar=True, label="datasets")
+
+def get_dropdown_menu_items():
+    items=[]
+    for k,v in colors_used.items() : 
+        items.append({"label":k,"color":v})
+    return items
+
+
 ##################################################################################
 #== MAIN == |
 ##################################################################################
@@ -143,8 +167,7 @@ if __name__ == "__main__":
                           help="Json list of colors example : '{\"datasetname\":\"colorname\"}'  \n %s" % color_names)
     # Parse the arguments
     args = parser.parse_args()
-    print(args.colors)
-    colors= json.loads(str(args.colors))
+    colors= json.loads(str(args.colors)) if args.colors is not None else {}
     
     ##############################################################################
     # LAYOUT
@@ -156,10 +179,11 @@ if __name__ == "__main__":
     #Global layout 
     app.layout = html.Div([
             dbc.NavbarSimple(
+          
         children=[
             dbc.Button("Reset", color="secondary", className="me-1",id="reset-2"),
-
-        ],
+            html.Div(id='dropdown-menu')
+        ],  
         brand="Embedding scatter",
         brand_href="#",
         color="dark",
@@ -180,6 +204,17 @@ if __name__ == "__main__":
 
 
     @app.callback(
+    Output('dropdown-menu', 'children'),
+    [Input('scatter-plot', 'figure')]  
+    )
+    def update_dropdown_menu(figure):
+        global updated_object 
+        if updated_object is None : 
+            print("CREATE")
+            return create_dropdown_menu(get_dropdown_menu_items()) 
+        return None 
+
+    @app.callback(
         Output('scatter-plot', 'figure'),
         [Input('reset-2', 'n_clicks')],
         [State('scatter-plot', 'selectedData')]
@@ -187,7 +222,7 @@ if __name__ == "__main__":
     def reset_selection(selectedData,relayoutData):
             
             print("==============reset===================")
-            return build_scatter_figure_layout(build_data(args.embedding_file))
+            return build_scatter_figure_layout(build_data(args.embedding_file,colors))
 
     @app.callback(
         Output('image-output', 'children'),
