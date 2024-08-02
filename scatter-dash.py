@@ -13,10 +13,58 @@ import base64
 import pprint
 import argparse
 import glob 
-import os 
+import os
+import matplotlib.pyplot as plt
+import matplotlib
+import plotly.graph_objects as go
+import json
 
 pp = pprint.PrettyPrinter(width=41, compact=True)
 
+color_names = [
+
+        'red',          # Primary color, very distinct
+        'blue',         # Primary color, very distinct
+        'green',        # Primary color, very distinct
+        'yellow',       # Secondary color, very distinct
+        'cyan',         # Secondary color, very distinct
+        'magenta',      # Secondary color, very distinct
+        'orange',       # Intermediate color, distinct
+        'purple',       # Intermediate color, distinct
+        'lime',         # Bright color, distinct
+        'aqua',         # Bright color, distinct
+        'fuchsia',      # Bright color, distinct
+        'teal',         # Dark color, distinct
+        'navy',         # Dark color, distinct
+        'maroon',       # Dark color, distinct
+        'olive',        # Dark color, distinct
+        'silver',       # Neutral color, distinct
+        'gray',         # Neutral color, distinct
+        'gold',         # Metallic color, distinct
+        'coral',        # Warm color, distinct
+        'salmon'        # Warm color, distinct
+    ]
+
+
+def get_color(dataset,
+              color_names,
+              colors_used,
+              colors_args):
+
+    dataset=str(dataset)
+    if dataset in colors_args.keys() : 
+        c=colors_args[dataset]
+        print ('dataset %s is defined by user for the color %s' % (dataset,c))
+        colors_used.add(c)
+        return c 
+    else : 
+        for cn in color_names : 
+            if cn not in colors_used : 
+                print ('dataset %s is defined the color %s' % (dataset,cn))
+                colors_used.add(cn)
+                return cn 
+    raise Exception ("No colors found")
+        
 
 def load_images (path) : 
     with Image.open(path) as img:
@@ -29,20 +77,27 @@ def load_images (path) :
         return encoded_image
 
 
-def build_data (embedding_file) : 
+def build_data (embedding_file,colors) : 
 
     print(embedding_file)
     df_loaded=pd.read_table(embedding_file,sep=",")
     print(df_loaded.head())
 
     data=[]
-    color_tab=['Aqua','Teal','Coral','Fuchsia']
     print(df_loaded.columns)
-    for datasetname in df_loaded['dataset'].unique() : 
+    colors_used = set()
+
+    for i, datasetname in enumerate(df_loaded['dataset'].unique()) : 
+        
+        sel_color = get_color(datasetname,
+                             color_names,
+                             colors_used,
+                             colors
+                             )
 
         df=df_loaded[df_loaded['dataset']==datasetname] 
-        sel_color=color_tab.pop()
         customData=[(i,sel_color) for i in df['image']] 
+     
         data.append(go.Scatter(customdata=customData,  
                            x=df['x'],
                            y=df['y'],
@@ -67,8 +122,6 @@ def build_scatter_figure_layout(data) :
         }
     return figure 
 
-
-
 ##################################################################################
 #== MAIN == |
 ##################################################################################
@@ -83,14 +136,22 @@ if __name__ == "__main__":
                      type=str, 
                      help='file path with the embedding in a csv format',
                      required=True)
+    parser.add_argument('--colors', 
+                          type=str,
+                          required=False,
+                          default=None,
+                          help="Json list of colors example : '{\"datasetname\":\"colorname\"}'  \n %s" % color_names)
     # Parse the arguments
     args = parser.parse_args()
+    print(args.colors)
+    colors= json.loads(str(args.colors))
     
     ##############################################################################
     # LAYOUT
     ##############################################################################
 
     app=dash.Dash(__name__)
+    app = dash.Dash(__name__, external_stylesheets=[], external_scripts=[])
 
     #Global layout 
     app.layout = html.Div([
@@ -106,7 +167,7 @@ if __name__ == "__main__":
     ),
         dcc.Graph(
             id='scatter-plot',
-            figure=build_scatter_figure_layout(build_data(args.embedding_file)),
+            figure=build_scatter_figure_layout(build_data(args.embedding_file,colors)),
             style={'width': '100%'}
         ),
         html.Br(),
