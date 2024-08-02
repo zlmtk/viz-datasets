@@ -5,7 +5,6 @@ RUN pip install dash
 RUN pip install dash-bootstrap-components 
 RUN pip install Pillow
 RUN pip install pandas 
-RUN pip install matplotlib 
 
 RUN mkdir /apps
 WORKDIR /apps
