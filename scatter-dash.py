@@ -146,6 +146,37 @@ def get_dropdown_menu_items():
     return items
 
 
+def build_modal () : 
+
+    print("crate modal structure")
+    modal = dbc.Modal(
+    [
+        dbc.ModalHeader(dbc.ModalTitle("Images urls")),
+        dbc.ModalBody(
+            dcc.Textarea(
+                id="textarea",
+                value="",
+                style={"width": "100%", "height": "100%"},
+                readOnly=True
+            )
+        ),
+    ],
+    id="modal",
+    is_open=False,
+    style={"width": "600px", "height": "400px"},
+    )
+    return modal 
+
+def build_python_list (selectedData) :
+    
+     str_r="selected_images=["
+     for i in selectedData['points'] : 
+        str_r+="'"+i['customdata'][0]+"',\n"
+     str_r=str_r[:-2]
+     str_r+="]\n"
+     return str_r
+
+
 ##################################################################################
 #== MAIN == |
 ##################################################################################
@@ -182,7 +213,8 @@ if __name__ == "__main__":
           
         children=[
             dbc.Button("Reset", color="secondary", className="me-1",id="reset-2"),
-            html.Div(id='dropdown-menu')
+            html.Div(id='dropdown-menu'),
+            dbc.Button("Selected images", color="secondary", className="me-1", id="sel-img", n_clicks=0),
         ],  
         brand="Embedding scatter",
         brand_href="#",
@@ -194,13 +226,36 @@ if __name__ == "__main__":
             figure=build_scatter_figure_layout(build_data(args.embedding_file,colors)),
             style={'width': '100%'}
         ),
+        build_modal(),
         html.Br(),
         html.Div(id='image-output'),
+       
     ])
 
     ##############################################################################
     #CALLBACK 
     ##############################################################################
+
+    # Callbacks model window 
+    @app.callback(
+        Output("modal", "is_open"),
+        [Input("sel-img", "n_clicks")],
+        [State("modal", "is_open")],
+    )
+    def toggle_modal(n1, is_open):
+        if n1 :
+            return not is_open
+        return is_open
+
+    @app.callback(
+    Output('textarea', 'value'),
+    [Input('scatter-plot', 'selectedData')],
+    )   
+    def update_textarea(selectedData):
+        
+        if selectedData is not None :   
+            return  build_python_list(selectedData)
+        return ""
 
 
     @app.callback(
@@ -210,7 +265,6 @@ if __name__ == "__main__":
     def update_dropdown_menu(figure):
         global updated_object 
         if updated_object is None : 
-            print("CREATE")
             return create_dropdown_menu(get_dropdown_menu_items()) 
         return None 
 
